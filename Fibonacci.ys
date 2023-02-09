@@ -1,0 +1,153 @@
+#TKJ-harjoitustyö 2021 Fibonacci
+#Saara Laasonen, 2686040, Saara.Laasonen@student.oulu.fi
+#
+#Pohdinta:
+#-Ajoaikaisten käskyjen lkm (virtuaalikoneella): 27859 (luvuilla 3, 5, 8)
+#-Luvuilla 377, 610 ja 987 käskyjen lkm on 34407
+#-Käskyjen lukumäärään vaikuttaa selvästi, mikä on nelio-aliohjelmassa bitin arvo
+# sekä kerto ja oikealle aliohjelmissa olevat maksimiarvot (nyt 2^24). Koska arvot
+# ovat todella suuria (jotta pystytään käymään kaikki tarvittavat luvut läpi),
+# lisäävät ne ohjelman käyttämien käskyjen määrää oli kyseessä mikä tahansa
+# Fibonacin luku.
+#-Peasant multiplication auttaa x^2 laskemisessa paljon, koska pelkällä
+# kertolaskulla x^2 laskemisessa menisi aivan liian kauan
+#-Aliohjelmien suoritusta voisi optimoida jakamalla aliohjelmat pienemmille ja 
+# suuremille luvuille. Esim. aluksi minulla oli maksimina 10 bittiä (2^10),
+# jolloin koodi meni luvuilla 3, 5, 8 läpi reilussa 6500:ssa käskyssä.
+# Nyt kun muutin koodin toimivaan kaikille 1000 pienemmille luvuille on 
+# käskyjen määrä melkein viisinkertaistunut 
+#-Bittisiirtoon MSB:tä kohti katsoin netistä mikä olisi heksadesimaali, kun
+# siirretään 1 esim. 24 bitillä vasemmalle
+
+main:
+	irmovq $0, %rax #tulos
+	irmovq $0, %rbx
+	irmovq pino, %rbp # pinon alkuosoite 
+    irmovq pino, %rsp #ilman pinoa koodi kaatuu
+	irmovq 0x700,%r11
+loop:
+	mrmovq (%r11), %r12 #arvo muistista pois
+	andq %r12,%r12 #tarkastetaan onko luku 0
+	je end #jos 0, ollaan kayty lapi kaikki lukujonon luvut -> ohjelma loppuu
+	rrmovq %r12,%r14 #kaikkiin aliohjelmiin siirretaan laskettava arvo 
+	#rekisteriin r14
+	call kerto #aliohjeman kutsu
+	irmovq $4, %r9
+	addq %r9,%rbx #lisaa 4 5x^2:een
+	rrmovq %rbx,%r12
+	rrmovq %r12,%r9 #jotta voidaan laskea 5x^2-4 (nelio muuttaa r12 olevan luvun)
+	call nelio
+	#jos kylla -> on fibonacci
+	andq %r12,%r12 #r12 pitaisi olla 0, kun neliojuuri menee tasan
+	je fibonacci
+	#jos ei -> 5x^2+4-8
+	irmovq $8, %r13
+	subq %r13,%r9
+	rrmovq %r9,%r12
+	call nelio
+	andq %r12,%r12 #r12 pitaisi olla 0, kun neliojuuri menee tasan
+	je fibonacci
+	jmp eifib #ei fibonacci luku -> ohjelma loppuu
+fibonacci:
+	irmovq $8, %r13
+	addq %r13,%r11 #lisaa 8:n r11:sta, jotta saataisiin muistista seuraava luku
+	jmp loop
+eifib:
+	mrmovq (%r11), %r12
+	rrmovq %r12,%rax #lisaa ei fibonacci luku raxiin
+end:
+	halt
+nelio:
+	irmovq $0, %r13#res
+	irmovq $0, %rbx
+	irmovq 0x1000000, %rcx #bit, muutos max 10 bit
+silmukka:
+	rrmovq %rcx, %rdx #bit_siirto
+	subq %r12,%rdx #bit-num
+	jle while
+	#halutaan siirtaa kahdella oikealle, joten kutsutaan aliohjelmaa kahdesti
+	rrmovq %rcx, %r14
+	call oikealle #aliohjelman kutsu
+	rrmovq %rbx, %r14 #aliohjelman tulos siirretaan r14 aliohjelmaa varten
+	call oikealle
+	rrmovq %rbx, %rcx #aliohjelman tulos korvaa bitin arvon
+	jmp silmukka
+while:
+	rrmovq %rcx, %rsi #bit_siirto
+	irmovq $0, %r10 #pakotetaan r10 nollaksi
+	subq %r10, %rsi #bit-0
+	je valmis #jos 0, lahdetaan while loopista pois
+	rrmovq %r13, %rdi #res_siirto
+	addq %rsi, %rdi #res+bit
+	rrmovq %r12, %r8
+	subq %rdi, %r8 #num-res+bit
+	jge suurempi
+	jl else
+suurempi:
+	subq %rdi, %r12 #luvusta vahennetaan res+bit
+	rrmovq %r13, %r14 
+	call oikealle
+	rrmovq %rbx, %r13 
+	addq %rcx, %r13 #bit + oikealle siirretty result
+	jmp done
+else:
+	rrmovq %r13, %r14
+	call oikealle
+	rrmovq %rbx, %r13
+done:
+	#siirretaan kahdesti oikealle eli kutsutaan aliohjelmaa kahdesti
+	rrmovq %rcx, %r14
+	call oikealle
+	rrmovq %rbx, %r14
+	call oikealle
+	rrmovq %rbx, %rcx
+	jmp while
+valmis:
+    ret
+oikealle:
+	irmovq $0,%rbx #tulos
+	irmovq $2, %r8 #maski, jossa toinen bitti on ylhaalla
+	irmovq $1, %rdx #maski, jossa eka bitti on ylhaalla
+	vertaa:
+	rrmovq %r8,%r10
+	andq %r14,%r10 #onko bitti 0 vai ei?
+	je nolla #hypataan addq lauseen yli, jos nolla
+muu:
+	addq %rdx,%rbx #jos muu kuin 0 lisaa rdx tulokseen
+	nolla:
+	addq %r8,%r8 #siirretaan maskeja yhdella
+	addq %rdx,%rdx
+	irmovq $16777216,%r10
+	subq %r8,%r10 #onko r8 pienempi kuin r10
+	jl paluu #jos r8 on suurempi, lopetetaan
+	jmp vertaa
+paluu:
+	ret
+kerto:
+	irmovq $1,%r8 #maski, jossa eka bitti ylhaalla
+	irmovq $0,%rbx #tulos
+	rrmovq %r14,%r9 #tallennetaan erilliseen rekisteriin kerroin
+	jatko:
+	rrmovq %r8,%r10
+	andq %r9,%r10 #onko bitti 0 vai ei?
+	je zero #hypataan addq lauseen yli, jos nolla
+einolla:
+	addq %r14,%rbx #lisaa r14 tulokseen, jos bitti on erisuuri kuin 0
+	zero:
+	addq %r8,%r8 #siirretaan maskia yhdella
+	addq %r14,%r14 #siirretaan kerrottavaa yhdella
+	irmovq $16777216,%r10 
+	subq %r8,%r10 #onko r8 pienempi kuin r10
+	jl loppu #jos r8 on suurempi, lopetetaan
+	jmp jatko
+loppu:
+	rrmovq %rbx, %r9
+	addq %r9,%rbx #kerrotaan 5 kertaa tulos
+	addq %r9,%rbx
+	addq %r9,%rbx
+	addq %r9,%rbx
+	ret
+.pos 0x800
+pino:
+.pos 0x700
+array:
